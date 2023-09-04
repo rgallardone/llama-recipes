@@ -1,22 +1,23 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
 
-import torch
-
 from functools import partial
-
-from ft_datasets import (
-    get_grammar_dataset,
-    get_alpaca_dataset,
-    get_samsum_dataset,
-)
 from typing import Optional
 
+import torch
+
+from ft_datasets import (
+    get_alpaca_dataset,
+    get_ancora_dataset,
+    get_grammar_dataset,
+    get_samsum_dataset,
+)
 
 DATASET_PREPROC = {
     "alpaca_dataset": partial(get_alpaca_dataset, max_words=224),
     "grammar_dataset": get_grammar_dataset,
     "samsum_dataset": get_samsum_dataset,
+    "ancora_co_es": get_ancora_dataset,
 }
 
 
@@ -32,7 +33,7 @@ def get_preprocessed_dataset(
             if split == "train"
             else dataset_config.test_split
         )
-    
+
     return DATASET_PREPROC[dataset_config.dataset](
         dataset_config,
         tokenizer,
