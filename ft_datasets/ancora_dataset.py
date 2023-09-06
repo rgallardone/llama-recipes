@@ -4,11 +4,14 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Literal, Tuple
 
+import numpy as np
+import pandas as pd
 import torch
 from datasets import Dataset
 from tqdm import tqdm
 
 RANDOM_SEED = 42
+TRAIN_SIZE = 0.8
 
 instructions = {
     "full_text": {
@@ -39,22 +42,33 @@ instructions = {
     },
     "next_sentence": {
         "es": {
-            "inst1": """Dado un texto encerrado por los tokens <texto> y </texto> y una oracion
-             encerrada por los tokens <oracion> y </oracion> con menciones a entidades, identificar
-             en la oración a que entidad refiere cada mención. En el texto y la oracion
-             se identifica con parentesis rectos las menciones a entidades. A su vez, en el texto
-             se identifica con un número todas las menciones que refieren a una
-             misma entidad. Se debe agregar un identificador a cada mención en la oración que
-             la asocie a una entidad en el texto. Si no refiere a una entidad presente en el
-             texto, agrega un nuevo identificador. Responde unicamente con la oracion resultante
-             y nada mas."""
+            "inst1": (
+                "Dado un texto encerrado por los tokens <texto> y </texto> y una oracion "
+                "encerrada por los tokens <oracion> y </oracion> con menciones a entidades, "
+                "identificar en la oración a que entidad refiere cada mención. En el texto y la "
+                "oracion se identifica con parentesis rectos las menciones a entidades. A su vez, "
+                "en el texto se identifica con un número todas las menciones que refieren a una "
+                "misma entidad. Se debe agregar un identificador a cada mención en la oración que "
+                "la asocie a una entidad en el texto. Si no refiere a una entidad presente en el "
+                "texto, agrega un nuevo identificador. Responde unicamente con la oracion resultante "
+                "y nada mas."
+            ),
+            "inst1_first": (
+                "Dada una oracion encerrada por los tokens <oracion> y </oracion> con "
+                "menciones a entidades, identificar con un número a que entidad refiere cada mención. "
+                "En la oración se identifica con parentesis rectos las menciones a entidades. "
+                "Las menciones a la misma entidad deben llevar el mismo identificador, y todas las "
+                "entidades distintas deben llevar distintos identificadores. Responde unicamente con "
+                "la oracion resultante y nada mas."
+            ),
         }
     },
 }
 
 
 class AncoraDataset(torch.utils.data.Dataset):
-    dataset = None
+    train_dataset = None
+    test_dataset = None
 
     def _load_data(
         self,
@@ -89,21 +103,20 @@ class AncoraDataset(torch.utils.data.Dataset):
                         root[s], use_gold_mentions
                     )
                     sentence_gold_text = re.sub(r" +", " ", sentence_gold_text)
-                    # TODO: DELETE THIS TO CONSIDER FIRST SENTENCES
-                    if s > 0:
-                        texts.append(re.sub(r" +", " ", sentence_text))
-                        gold_texts.append(sentence_gold_text)
-                        previous_texts.append(previous_text)
-                        sentence_ids.append(s)
-                        files.append(file_path)
+                    texts.append(re.sub(r" +", " ", sentence_text))
+                    gold_texts.append(sentence_gold_text)
+                    previous_texts.append(previous_text)
+                    sentence_ids.append(s)
+                    files.append(file_path)
                     previous_text += f" {sentence_gold_text}"
 
         if mode == "full_text":
+            # TODO: change splitting stage for full_text mode
             AncoraDataset.dataset = Dataset.from_dict(
                 {"text": texts, "gold_text": gold_texts, "file": files}
             )
         elif mode == "next_sentence":
-            AncoraDataset.dataset = Dataset.from_dict(
+            dataset_df = pd.DataFrame(
                 {
                     "file": files,
                     "sentence_id": sentence_ids,
@@ -112,9 +125,20 @@ class AncoraDataset(torch.utils.data.Dataset):
                     "gold_sentence": gold_texts,
                 }
             )
-        AncoraDataset.dataset = AncoraDataset.dataset.train_test_split(
-            test_size=0.2, seed=RANDOM_SEED
-        )
+            file_names = dataset_df["file"].drop_duplicates()
+            train_file_names = file_names.sample(
+                frac=TRAIN_SIZE, random_state=RANDOM_SEED
+            )
+            test_file_names = file_names.drop(train_file_names.index)
+            train_dataset_df = dataset_df[dataset_df["file"].isin(train_file_names)]
+            test_dataset_df = dataset_df[dataset_df["file"].isin(test_file_names)]
+
+            AncoraDataset.train_dataset = Dataset.from_pandas(
+                train_dataset_df, split="train"
+            )
+            AncoraDataset.test_dataset = Dataset.from_pandas(
+                test_dataset_df, split="test"
+            )
 
     def __init__(
         self,
@@ -126,13 +150,17 @@ class AncoraDataset(torch.utils.data.Dataset):
         instruction: str = "inst1",
         max_words: int = 1500,
     ):
-        if AncoraDataset.dataset is None:
+        if AncoraDataset.train_dataset is None:
             self._load_data(dataset_config, mode, use_gold_mentions)
 
-        self.dataset_split = AncoraDataset.dataset[partition]
+        if partition == "train":
+            self.dataset_split = AncoraDataset.train_dataset
+        else:
+            self.dataset_split = AncoraDataset.test_dataset
         self.tokenizer = tokenizer
         self.mode = mode
         self.inst = instructions[mode]["es"][instruction]
+        self.inst_first = instructions[mode]["es"][f"{instruction}_first"]
         self.max_words = max_words
 
     def _parse_tree(
@@ -170,13 +198,15 @@ class AncoraDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.dataset_split)
 
-    # TODO: Rewrite this function
     def __getitem__(self, index):
         IGNORE_INDEX = -100  # The default setting in CrossEntropyLoss
 
         example = self.dataset_split[index]
-        prompt = f"""<s>[INST]{self.inst}\n<texto>{example['previous_text']}</texto>
-         \n<oracion>{example['sentence']}</oracion>[/INST]"""
+        if example["previous_text"] == "":
+            prompt = f"<s>[INST]{self.inst_first}\n<oracion>{example['sentence']}</oracion>[/INST]"
+        else:
+            prompt = f"""<s>[INST]{self.inst}\n<texto>{example['previous_text']}</texto>
+            \n<oracion>{example['sentence']}</oracion>[/INST]"""
         prompt_w_output = prompt + f" {example['gold_sentence']} </s>"
 
         prompt = torch.tensor(self.tokenizer.encode(prompt), dtype=torch.int64)

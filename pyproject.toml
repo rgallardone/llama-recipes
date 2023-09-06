@@ -8,6 +8,7 @@ packages = [{include = "llama_recipes"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
+ipdb = "^0.13.13"
 
 
 [build-system]
