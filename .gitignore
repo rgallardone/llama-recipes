@@ -3,5 +3,4 @@ __pycache__
 .ipynb_checkpoints
 *.txt
 .vscode
-models
-models_aux
+

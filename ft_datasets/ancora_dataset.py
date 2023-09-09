@@ -13,6 +13,7 @@ from tqdm import tqdm
 RANDOM_SEED = 42
 TRAIN_SIZE = 0.8
 
+# TODO: move this to a file
 instructions = {
     "full_text": {
         "en": {
