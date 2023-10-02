@@ -11,7 +11,10 @@ from datasets import Dataset
 from tqdm import tqdm
 
 RANDOM_SEED = 42
-TRAIN_SIZE = 0.8
+TRAIN_SIZE = 0.74
+DEV_SIZE = 0.12
+POSTPROCESSED_DATASET_DIR = "postprocessed/next_sentence_gold_mentions"
+
 
 # TODO: move this to a file
 instructions = {
@@ -126,19 +129,32 @@ class AncoraDataset(torch.utils.data.Dataset):
                     "gold_sentence": gold_texts,
                 }
             )
+
             file_names = dataset_df["file"].drop_duplicates()
             train_file_names = file_names.sample(
                 frac=TRAIN_SIZE, random_state=RANDOM_SEED
             )
-            test_file_names = file_names.drop(train_file_names.index)
+            test_dev_file_names = file_names.drop(train_file_names.index)
+            dev_frac = DEV_SIZE / (1 - TRAIN_SIZE)
+            dev_file_names = test_dev_file_names.sample(
+                frac=dev_frac, random_state=RANDOM_SEED
+            )
+            test_file_names = test_dev_file_names.drop(dev_file_names.index)
             train_dataset_df = dataset_df[dataset_df["file"].isin(train_file_names)]
+            dev_dataset_df = dataset_df[dataset_df["file"].isin(dev_file_names)]
             test_dataset_df = dataset_df[dataset_df["file"].isin(test_file_names)]
+
+            datasets_dir = f"{dataset_config.data_dir}/{POSTPROCESSED_DATASET_DIR}"
+
+            train_dataset_df.to_parquet(f"{datasets_dir}/train.parquet")
+            dev_dataset_df.to_parquet(f"{datasets_dir}/dev.parquet")
+            test_dataset_df.to_parquet(f"{datasets_dir}/test.parquet")
 
             AncoraDataset.train_dataset = Dataset.from_pandas(
                 train_dataset_df, split="train"
             )
-            AncoraDataset.test_dataset = Dataset.from_pandas(
-                test_dataset_df, split="test"
+            AncoraDataset.dev_dataset = Dataset.from_pandas(
+                dev_dataset_df, split="dev"
             )
 
     def __init__(
@@ -152,12 +168,23 @@ class AncoraDataset(torch.utils.data.Dataset):
         max_words: int = 1500,
     ):
         if AncoraDataset.train_dataset is None:
-            self._load_data(dataset_config, mode, use_gold_mentions)
+            datasets_dir = f"{dataset_config.data_dir}/{POSTPROCESSED_DATASET_DIR}"
+            if os.path.isdir(datasets_dir) and len(os.listdir(datasets_dir)) > 1:
+                train_dataset_df = pd.read_parquet(f"{datasets_dir}/train.parquet")
+                dev_dataset_df = pd.read_parquet(f"{datasets_dir}/dev.parquet")
+                AncoraDataset.train_dataset = Dataset.from_pandas(
+                    train_dataset_df, split="train"
+                )
+                AncoraDataset.dev_dataset = Dataset.from_pandas(
+                    dev_dataset_df, split="dev"
+                )
+            else:
+                self._load_data(dataset_config, mode, use_gold_mentions)
 
         if partition == "train":
             self.dataset_split = AncoraDataset.train_dataset
         else:
-            self.dataset_split = AncoraDataset.test_dataset
+            self.dataset_split = AncoraDataset.dev_dataset
         self.tokenizer = tokenizer
         self.mode = mode
         self.inst = instructions[mode]["es"][instruction]
@@ -183,7 +210,8 @@ class AncoraDataset(torch.utils.data.Dataset):
                 childs_text += f"{child_text} "
                 childs_gold_text += f"{child_gold_text} "
 
-        if "entity" in root.attrib:
+        # Singleton mentions are NOT included on the training and evaluation data
+        if ("entity" in root.attrib) and ("singleton" not in root.attrib["entity"]):
             ent_num = re.search(r"\d+", root.attrib["entity"]).group(0)
             if use_gold_mentions:
                 text += f"[ {childs_text}] "

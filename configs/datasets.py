@@ -32,5 +32,6 @@ class alpaca_dataset:
 class ancora_co_es:
     dataset: str = "ancora_co_es"
     train_split: str = "train"
+    dev_split: str = "dev"
     test_split: str = "test"
     data_dir: str = "ancora_dataset/ancora-3.0.1es"

@@ -6,6 +6,7 @@ import torch
 from datasets import Dataset
 from tqdm import tqdm
 from transformers import LlamaTokenizer, PreTrainedModel
+import difflib
 
 
 def convert_to_conll(target_string):
@@ -19,6 +20,8 @@ def convert_to_conll(target_string):
 
     regex = re.compile(r'\[\d+|[a-zA-Z0-9À-ÿ]+\s*|[.,;!?"\'()$%&\\+*-:<=>@_]|\]')
     tokens = re.findall(regex, target_string)
+    
+
 
     for t in tokens:
         if re.match(r"\[\d+", t):
@@ -37,14 +40,21 @@ def convert_to_conll(target_string):
         elif re.match(r"\]", t):
             # Token is a closing bracket
             id = id_stack.pop()
-            if coref_string == "":
-                coref_string = f"{id})"
+            if prev_word == "":
+                # If it's a wordless entity, add it on a line by itself
+                coref_string += ")"
+                words.append("")
+                corefs.append(coref_string)
+                coref_string = ""
             else:
-                open_entity = re.findall(r"\(\d+(?!\))", coref_string)
-                if open_entity and open_entity[-1] == f"({id}":
-                    coref_string += ")"
+                if coref_string == "":
+                    coref_string = f"{id})"
                 else:
-                    coref_string += f"{id})"
+                    open_entity = re.findall(r"\(\d+(?![\)\d])", coref_string)
+                    if open_entity and open_entity[-1] == f"({id}":
+                        coref_string += ")"
+                    else:
+                        coref_string += f"{id})"
         else:
             # Token is a word or punctuation symbol
             if prev_word != "":
@@ -126,14 +136,12 @@ def batch_inference_documents(
     prompt_first = "<s>[INST]{instruction}\n<oracion>{sentence}</oracion>[/INST]"
     prompt = "<s>[INST]{instruction}\n<texto>{previous_text}</texto>\n<oracion>{sentence}</oracion>[/INST]"
 
-    import ipdb
-
-    ipdb.set_trace()
     df = df.set_index("file")
+    df["raw_result"] = None
     df["result"] = None
     df["previous_text"] = ""
 
-    for sid in range(df["sentence_id"].max()):
+    for sid in range(df["sentence_id"].max()+1):
         print(f"Processing sentence_id = {sid}")
         if sid > 0:
             previous_df = results_df[results_df["sentence_id"] == (sid - 1)].copy()
@@ -169,6 +177,10 @@ def batch_inference_documents(
                 axis=1,
             )
 
+        # Decrease batch size as documents get bigger
+        if ((sid % 5 == 0) and (sid > 0)):
+            batch_size = batch_size - 1
+
         prompts = list(prompts)
         num_batches = math.ceil(len(prompts) / batch_size)
 
@@ -193,7 +205,7 @@ def batch_inference_documents(
 
             sentences_df.iloc[
                 i * batch_size : (i + 1) * batch_size,
-                sentences_df.columns.get_loc("result"),
+                sentences_df.columns.get_loc("raw_result"),
             ] = outputs_text
 
             # Free up GPU memory
@@ -201,8 +213,8 @@ def batch_inference_documents(
                 del v
             torch.cuda.empty_cache()
 
-        sentences_df.loc[:, "result"] = sentences_df["result"].apply(
-            lambda res: res.split("[/INST]")[-1]
+        sentences_df.loc[:, "result"] = sentences_df[["sentence", "raw_result"]].apply(
+            lambda row: postprocess_result(row["sentence"], row["raw_result"]), axis=1
         )
 
         if sid == 0:
@@ -211,3 +223,84 @@ def batch_inference_documents(
             results_df = pd.concat([results_df, sentences_df])
 
     return results_df
+
+def align_result_with_sentence(sentence: str, result: str) -> str:
+    """Due to hallucination, the resulting output of the model might not be exactly
+    the same as the sentence given to it. This function modifies the result so that
+    it's text is exactly the same as the sentence, but with the added identifiers
+    to the mention.
+
+    Args:
+        sentence (str): target sentence without the identifiers for the mentions.
+        result (str): result of the model, with added identifiers for the mentions
+        and slight differences with respect to the sentence.
+
+    Returns:
+        str: result of the model, with the exact same text as the sentence, and
+        added identifiers to the mentions.
+    """
+    # Remove all preceeding whitespaces, dots and commas on the result
+    result = re.sub(r'^[\s.,]*', '', result)
+    output = ""
+    for _, s in enumerate(difflib.ndiff(result, sentence)):
+        if (s[0] == "-" and not re.match(r"\d", s[-1])):
+            continue
+        output += s[-1]
+    return output
+
+def fill_empty_identifiers(result: str) -> str:
+    """Model might not output an identifier for a mention. In that case,
+    we add a default identifier (999) for the scoring algorithms to work.
+
+    Args:
+        result (str): result of the model, with mentions that might not have
+        identifiers.
+
+    Returns:
+        str: result of the model, where mentions with no identifiers were
+        assigned the default identifier 999.
+    """
+    return re.sub(r"\[(?!\d)", "[999", result)
+
+def fill_identifiers_in_sentence(sentence: str, result: str) -> str:
+    id_list = re.findall(r"(?<=\[)\d*", result)
+
+    target_mentions_num = len(re.findall(r"\[", sentence))
+
+    if (len(id_list) < target_mentions_num):
+        id_list = ["999" for _ in range(target_mentions_num - len(id_list))] + id_list
+    
+    id_iter = iter(id_list)
+
+    def get_id_string(match):
+        try:
+            next_id = next(id_iter)
+            if next_id == "":
+                next_id = 999
+        except StopIteration:
+            next_id = 999
+        return f"[{next_id}"
+    
+    output = re.sub(r"\[", get_id_string, sentence)
+
+    return output
+
+def postprocess_result(sentence: str, result: str) -> str:
+    """Apply several postprocessing functions to the result of the model
+    to prepare it for the scoring functions.
+
+    Args:
+        sentence (str): target sentence without the identifiers for the mentions.
+        result (str): result of the model. It might have slight differences with
+        respect to the sentence and it might have mentions without identifiers.
+
+    Returns:
+        str: result of the model with identifiers for all the mentions and the
+        text identical to the sentence.
+    """
+    # Discard the prompt from the output
+    result = result.split("[/INST]")[-1]
+
+    result = fill_identifiers_in_sentence(sentence, result)
+
+    return result
