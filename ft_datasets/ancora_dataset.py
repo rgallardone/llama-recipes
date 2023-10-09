@@ -153,9 +153,7 @@ class AncoraDataset(torch.utils.data.Dataset):
             AncoraDataset.train_dataset = Dataset.from_pandas(
                 train_dataset_df, split="train"
             )
-            AncoraDataset.dev_dataset = Dataset.from_pandas(
-                dev_dataset_df, split="dev"
-            )
+            AncoraDataset.dev_dataset = Dataset.from_pandas(dev_dataset_df, split="dev")
 
     def __init__(
         self,

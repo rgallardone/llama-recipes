@@ -175,9 +175,9 @@ def train(
         lr_scheduler.step()
 
         if train_config.run_validation:
-            eval_ppl, eval_epoch_loss = evaluation(
-                model, train_config, eval_dataloader, local_rank, tokenizer
-            )
+            # eval_ppl, eval_epoch_loss = evaluation(
+            #    model, train_config, eval_dataloader, local_rank, tokenizer
+            # )
             checkpoint_start_time = time.perf_counter()
             # TODO: find out why is the second condition failing
             # TODO: something to do with the -100???
@@ -245,15 +245,15 @@ def train(
                     dist.barrier()
             checkpoint_end_time = time.perf_counter() - checkpoint_start_time
             checkpoint_times.append(checkpoint_end_time)
-            if eval_epoch_loss < best_val_loss:
-                best_val_loss = eval_epoch_loss
-                if train_config.enable_fsdp:
-                    if rank == 0:
-                        print(f"best eval loss on epoch {epoch} is {best_val_loss}")
-                else:
-                    print(f"best eval loss on epoch {epoch} is {best_val_loss}")
-            val_loss.append(best_val_loss)
-            val_prep.append(eval_ppl)
+            # if eval_epoch_loss < best_val_loss:
+            #    best_val_loss = eval_epoch_loss
+            #    if train_config.enable_fsdp:
+            #        if rank == 0:
+            #            print(f"best eval loss on epoch {epoch} is {best_val_loss}")
+            #    else:
+            #        print(f"best eval loss on epoch {epoch} is {best_val_loss}")
+            # val_loss.append(best_val_loss)
+            # val_prep.append(eval_ppl)
 
         if train_config.enable_fsdp:
             if rank == 0:
@@ -268,15 +268,15 @@ def train(
     avg_checkpoint_time = sum(checkpoint_times) / len(checkpoint_times)
     avg_train_prep = sum(train_prep) / len(train_prep)
     avg_train_loss = sum(train_loss) / len(train_loss)
-    if train_config.run_validation:
-        avg_eval_prep = sum(val_prep) / len(val_prep)
-        avg_eval_loss = sum(val_loss) / len(val_loss)
+    # if train_config.run_validation:
+    #    avg_eval_prep = sum(val_prep) / len(val_prep)
+    #    avg_eval_loss = sum(val_loss) / len(val_loss)
 
     results["avg_train_prep"] = avg_train_prep
     results["avg_train_loss"] = avg_train_loss
-    if train_config.run_validation:
-        results["avg_eval_prep"] = avg_eval_prep
-        results["avg_eval_loss"] = avg_eval_loss
+    # if train_config.run_validation:
+    #    results["avg_eval_prep"] = avg_eval_prep
+    #    results["avg_eval_loss"] = avg_eval_loss
     results["avg_epoch_time"] = avg_epoch_time
     results["avg_checkpoint_time"] = avg_checkpoint_time
 
