@@ -35,3 +35,12 @@ class ancora_co_es:
     dev_split: str = "dev"
     test_split: str = "test"
     data_dir: str = "ancora_dataset/ancora-3.0.1es"
+
+
+@dataclass
+class ancora_co_es_ud:
+    dataset: str = "ancora_co_es_ud"
+    train_split: str = "train"
+    dev_split: str = "dev"
+    test_split: str = "test"
+    data_dir: str = "corefud_1_1/CorefUD-1.1-public/data/CorefUD_Spanish-AnCora"
