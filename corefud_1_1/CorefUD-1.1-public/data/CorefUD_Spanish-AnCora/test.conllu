@@ -1,0 +1,52 @@
+# newdoc id = CESS-CAST-A-20000217-13959
+# global.Entity = eid-etype-head-other
+# sent_id = CESS-CAST-A-20000217-13959-s1
+# text = Los jugadores del Espanyol aseguraron hoy que prefieren enfrentarse al Barcelona en la final de la Copa del Rey en lugar de en las semifinales, tras clasificarse ayer ambos equipos catalanes para esta ronda.
+1	Los	el	DET	da0mp0	Definite=Def|Gender=Masc|Number=Plur|PronType=Art	2	det	2:det	Entity=(e16088--2-gstype:gen,HomoDD
+2	jugadores	jugador	NOUN	ncmp000	Gender=Masc|Number=Plur	6	nsubj	6:nsubj	ArgTem=arg0:agt
+3-4	del	_	_	_	_	_	_	_	_
+3	de	de	ADP	spcms	_	5	case	5:case	_
+4	el	el	DET	_	Definite=Def|Gender=Masc|Number=Sing|PronType=Art	5	det	5:det	_
+5	Espanyol	Espanyol	PROPN	np0000o	_	2	nmod	2:nmod	Entity=(e16089-organization-1-gstype:spec)e16088)
+6	aseguraron	asegurar	VERB	vmis3p0	Mood=Ind|Number=Plur|Person=3|Tense=Past|VerbForm=Fin	0	root	0:root	_
+7	hoy	hoy	ADV	rg	_	6	advmod	6:advmod	ArgTem=argM:tmp
+8	que	que	SCONJ	cs	_	9	mark	9:mark	_
+8.1	_	_	PRON	p	_	_	_	9:nsubj	ArgTem=arg0:agt|Entity=(e16088--1-CorefType:ident,gstype:gen)
+9	prefieren	preferir	VERB	vmip3p0	Mood=Ind|Number=Plur|Person=3|Tense=Pres|VerbForm=Fin	6	ccomp	6:ccomp	ArgTem=arg1:pat
+10-11	enfrentarse	_	_	_	_	_	_	_	_
+10	enfrentar	enfrentar	VERB	vmn0000	VerbForm=Inf	9	xcomp	9:xcomp	ArgTem=arg1:pat
+11	se	él	PRON	_	Case=Acc|Person=3|PrepCase=Npr|PronType=Prs|Reflex=Yes	10	expl:pv	10:expl:pv	_
+12-13	al	_	_	_	_	_	_	_	_
+12	a	a	ADP	spcms	_	14	case	14:case	_
+13	el	el	DET	_	Definite=Def|Gender=Masc|Number=Sing|PronType=Art	14	det	14:det	_
+14	Barcelona	Barcelona	PROPN	np0000l	_	10	obj	10:obj	ArgTem=arg1:pat|Entity=(e16090-organization-1-gstype:spec)
+15	en	en	ADP	sps00	_	17	case	17:case	_
+16	la	el	DET	da0fs0	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	17	det	17:det	Entity=(e16091--2-gstype:gen,HomoDD
+17	final	final	NOUN	ncfs000	Gender=Fem|Number=Sing	10	obl	10:obl	ArgTem=argM:loc
+18	de	de	ADP	sps00	_	20	case	20:case	_
+19	la	el	DET	da0fs0	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	20	det	20:det	Entity=(e16092-other-2-gstype:spec
+20	Copa	Copa	PROPN	np0000a	_	17	nmod	17:nmod	_
+21-22	del	_	_	_	_	_	_	_	_
+21	de	de	ADP	_	_	23	case	23:case	_
+22	el	el	DET	_	Definite=Def|Gender=Masc|Number=Sing|PronType=Art	23	det	23:det	_
+23	Rey	Rey	PROPN	_	_	20	flat	20:flat	Entity=e16092)e16091)
+24	en	en	ADP	sps00	_	29	cc	29:cc	_
+25	lugar	lugar	NOUN	_	_	24	fixed	24:fixed	_
+26	de	de	ADP	_	_	24	fixed	24:fixed	_
+27	en	en	ADP	sps00	_	29	case	29:case	_
+28	las	el	DET	da0fp0	Definite=Def|Gender=Fem|Number=Plur|PronType=Art	29	det	29:det	Entity=(e16093--2-gstype:gen,HomoDD
+29	semifinales	semifinal	NOUN	ncfp000	Gender=Fem|Number=Plur	17	conj	17:conj	Entity=e16093)|SpaceAfter=No
+30	,	,	PUNCT	fc	PunctType=Comm	32	punct	32:punct	_
+31	tras	tras	ADP	sps00	_	32	mark	32:mark	_
+32-33	clasificarse	_	_	_	_	_	_	_	_
+32	clasificar	clasificar	VERB	vmn0000	VerbForm=Inf	6	advcl	6:advcl	ArgTem=argM:tmp
+33	se	él	PRON	_	Case=Acc|Person=3|PrepCase=Npr|PronType=Prs|Reflex=Yes	32	expl:pv	32:expl:pv	_
+34	ayer	ayer	ADV	rg	_	32	advmod	32:advmod	ArgTem=argM:tmp
+35	ambos	ambos	NUM	dn0mp0	Gender=Masc|Number=Plur|NumType=Card	36	nummod	36:nummod	Entity=(e16094-other-2-CorefType:ident,gstype:spec|SplitAnte=e16089<e16094,e16090<e16094
+36	equipos	equipo	NOUN	ncmp000	Gender=Masc|Number=Plur	32	nsubj	32:nsubj	ArgTem=arg1:tem
+37	catalanes	catalán	ADJ	aq0mp0	Gender=Masc|Number=Plur	36	amod	36:amod	Entity=e16094)
+38	para	para	ADP	sps00	_	40	case	40:case	_
+39	esta	este	DET	dd0fs0	Gender=Fem|Number=Sing|PronType=Dem	40	det	40:det	Entity=(e16093--2-CorefType:ident,gstype:gen
+40	ronda	ronda	NOUN	ncfs000	Gender=Fem|Number=Sing	32	obl	32:obl	ArgTem=argM:adv|Entity=e16093)|SpaceAfter=No
+41	.	.	PUNCT	fp	PunctType=Peri	6	punct	6:punct	_
+

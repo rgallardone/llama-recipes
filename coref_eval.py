@@ -3,14 +3,19 @@ import subprocess
 import sys
 
 import fire
+import pandas as pd
 from transformers import LlamaTokenizer
 
-from configs.datasets import ancora_co_es
-from eval.eval_utils import batch_inference_documents, write_dataset_to_conll
+from configs.datasets import ancora_co_es, ancora_co_es_ud
+from eval.eval_utils import (
+    batch_inference_documents,
+    create_conllu_response_file,
+    write_dataset_to_conll,
+)
 from ft_datasets.ancora_dataset import AncoraDataset
-from ft_datasets.instructions import INSTRUCTIONS
+from ft_datasets.ancora_dataset_ud import AncoraDatasetUD
+from ft_datasets.coref_instructions import INSTRUCTIONS
 from inference.model_utils import load_model, load_peft_model
-import pandas as pd
 
 KEY_FILE = "test.key"
 RESPONSE_FILE = "test.response"
@@ -20,6 +25,7 @@ RESULTS_FILE = "results.parquet"
 def main(
     eval_dir: str,
     model_name: str,
+    is_UD: bool = True,
     results_file: str = None,
     peft_model_name: str = None,
     quantization: bool = False,
@@ -30,7 +36,7 @@ def main(
     use_cache: bool = True,  # [optional] Whether or not the model should use the past last key/values attentions Whether or not the model should use the past last key/values attentions (if applicable to the model) to speed up decoding.
     **kwargs,
 ):
-    if (results_file):
+    if results_file:
         print("Loading results file for evaluation")
         results_df = pd.read_parquet(results_file)
     else:
@@ -50,16 +56,20 @@ def main(
         )
         model.resize_token_embeddings(model.config.vocab_size + 1)
 
-        dataset_config = ancora_co_es()
-
         print("Load dataset")
-        dev_dataset = AncoraDataset(dataset_config, tokenizer, "dev").dataset_split
+        if is_UD:
+            dataset_config = ancora_co_es_ud()
+            dev_dataset = AncoraDatasetUD(
+                dataset_config, tokenizer, "dev"
+            ).dataset_split
+        else:
+            dataset_config = ancora_co_es()
+            dev_dataset = AncoraDataset(dataset_config, tokenizer, "dev").dataset_split
 
         dev_df = dev_dataset.to_pandas()
 
         if max_sentences_per_doc is not None:
             dev_df = dev_df[dev_df["sentence_id"] <= max_sentences_per_doc]
-
 
         print("Run inference over the test data")
 
@@ -78,33 +88,49 @@ def main(
         print("Store results")
         results_df.to_parquet(f"{eval_dir}/{RESULTS_FILE}")
 
-
-    print("Create key file")
-    if os.path.isfile(f"{eval_dir}/{KEY_FILE}"):
-        print("--> Key file already exists")
-    else:
-        # TODO: some entities are not closing, check the first document
-        write_dataset_to_conll(results_df, "gold_sentence", f"{eval_dir}/{KEY_FILE}")
-        print("--> Key file created")
+    if not is_UD:
+        print("Create key file")
+        if os.path.isfile(f"{eval_dir}/{KEY_FILE}"):
+            print("--> Key file already exists")
+        else:
+            write_dataset_to_conll(
+                results_df, "gold_sentence", f"{eval_dir}/{KEY_FILE}"
+            )
+            print("--> Key file created")
 
     print("Create response file")
-    write_dataset_to_conll(results_df, "result", f"{eval_dir}/{RESPONSE_FILE}")
-
-    
+    if is_UD:
+        dev_key_file_path = f"{dataset_config.data_dir}/es_ancora-corefud-dev.conllu"
+        create_conllu_response_file(
+            results_df, dev_key_file_path, f"{eval_dir}/{RESPONSE_FILE}"
+        )
+    else:
+        write_dataset_to_conll(results_df, "result", f"{eval_dir}/{RESPONSE_FILE}")
 
     print("Evaluate the results")
-    perl_script = subprocess.Popen(
-        [
-            "perl",
-            "reference-coreference-scorers/scorer.pl",
-            "all",
-            f"{eval_dir}/{KEY_FILE}",
-            f"{eval_dir}/{RESPONSE_FILE}",
-            "none"
-        ],
-        stdout=sys.stdout,
-    )
-    perl_script.communicate()
+    if is_UD:
+        corefud_scorer = subprocess.Popen(
+            [
+                "python",
+                "corefud-scorer/corefud-scorer.py",
+                dev_key_file_path,
+                f"{eval_dir}/{RESPONSE_FILE}",
+            ]
+        )
+        corefud_scorer.communicate()
+    else:
+        perl_script = subprocess.Popen(
+            [
+                "perl",
+                "reference-coreference-scorers/scorer.pl",
+                "all",
+                f"{eval_dir}/{KEY_FILE}",
+                f"{eval_dir}/{RESPONSE_FILE}",
+                "none",
+            ],
+            stdout=sys.stdout,
+        )
+        perl_script.communicate()
 
 
 if __name__ == "__main__":

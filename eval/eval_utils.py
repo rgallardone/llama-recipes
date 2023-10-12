@@ -1,3 +1,4 @@
+import difflib
 import math
 import re
 
@@ -6,7 +7,6 @@ import torch
 from datasets import Dataset
 from tqdm import tqdm
 from transformers import LlamaTokenizer, PreTrainedModel
-import difflib
 
 
 def convert_to_conll(target_string):
@@ -20,8 +20,6 @@ def convert_to_conll(target_string):
 
     regex = re.compile(r'\[\d+|[a-zA-Z0-9À-ÿ]+\s*|[.,;!?"\'()$%&\\+*-:<=>@_]|\]')
     tokens = re.findall(regex, target_string)
-    
-
 
     for t in tokens:
         if re.match(r"\[\d+", t):
@@ -140,16 +138,19 @@ def batch_inference_documents(
     df["raw_result"] = None
     df["result"] = None
     df["previous_text"] = ""
+    df["sentence_index"] = df["sentence_id"].apply(
+        lambda x: re.search(r"\d+$", x).group(0)
+    )
 
-    for sid in range(df["sentence_id"].max()+1):
+    for sid in range(df["sentence_index"].max() + 1):
         print(f"Processing sentence_id = {sid}")
         if sid > 0:
-            previous_df = results_df[results_df["sentence_id"] == (sid - 1)].copy()
+            previous_df = results_df[results_df["sentence_index"] == (sid - 1)].copy()
             previous_df.loc[:, "previous_text"] = (
                 previous_df["previous_text"] + " " + previous_df["result"]
             )
             sentences_df = (
-                df[df["sentence_id"] == sid].copy().drop(columns=["previous_text"])
+                df[df["sentence_index"] == sid].copy().drop(columns=["previous_text"])
             )
             sentences_df = sentences_df.join(previous_df["previous_text"])
 
@@ -164,7 +165,7 @@ def batch_inference_documents(
                 axis=1,
             )
         else:
-            sentences_df = df[df["sentence_id"] == sid].copy()
+            sentences_df = df[df["sentence_index"] == sid].copy()
             prompts = sentences_df.apply(
                 lambda row: prompt_first.format_map(
                     {
@@ -178,7 +179,7 @@ def batch_inference_documents(
             )
 
         # Decrease batch size as documents get bigger
-        if ((sid % 5 == 0) and (sid > 0)):
+        if (sid % 5 == 0) and (sid > 0):
             batch_size = batch_size - 1
 
         prompts = list(prompts)
@@ -224,6 +225,7 @@ def batch_inference_documents(
 
     return results_df
 
+
 def align_result_with_sentence(sentence: str, result: str) -> str:
     """Due to hallucination, the resulting output of the model might not be exactly
     the same as the sentence given to it. This function modifies the result so that
@@ -240,13 +242,14 @@ def align_result_with_sentence(sentence: str, result: str) -> str:
         added identifiers to the mentions.
     """
     # Remove all preceeding whitespaces, dots and commas on the result
-    result = re.sub(r'^[\s.,]*', '', result)
+    result = re.sub(r"^[\s.,]*", "", result)
     output = ""
     for _, s in enumerate(difflib.ndiff(result, sentence)):
-        if (s[0] == "-" and not re.match(r"\d", s[-1])):
+        if s[0] == "-" and not re.match(r"\d", s[-1]):
             continue
         output += s[-1]
     return output
+
 
 def fill_empty_identifiers(result: str) -> str:
     """Model might not output an identifier for a mention. In that case,
@@ -262,14 +265,15 @@ def fill_empty_identifiers(result: str) -> str:
     """
     return re.sub(r"\[(?!\d)", "[999", result)
 
+
 def fill_identifiers_in_sentence(sentence: str, result: str) -> str:
     id_list = re.findall(r"(?<=\[)\d*", result)
 
     target_mentions_num = len(re.findall(r"\[", sentence))
 
-    if (len(id_list) < target_mentions_num):
+    if len(id_list) < target_mentions_num:
         id_list = ["999" for _ in range(target_mentions_num - len(id_list))] + id_list
-    
+
     id_iter = iter(id_list)
 
     def get_id_string(match):
@@ -280,10 +284,11 @@ def fill_identifiers_in_sentence(sentence: str, result: str) -> str:
         except StopIteration:
             next_id = 999
         return f"[{next_id}"
-    
+
     output = re.sub(r"\[", get_id_string, sentence)
 
     return output
+
 
 def postprocess_result(sentence: str, result: str) -> str:
     """Apply several postprocessing functions to the result of the model
@@ -304,3 +309,75 @@ def postprocess_result(sentence: str, result: str) -> str:
     result = fill_identifiers_in_sentence(sentence, result)
 
     return result
+
+
+def create_conllu_response_file(
+    results_df: pd.DataFrame, key_file_path: str, response_file_path: str
+):
+    """Create the response file from the system on the CoNLL-U format. Since the key and response
+    files need to be exactly the same for the scoring function to work (with the difference of
+    tagged entities), we take the key file and exchange the entity identifiers with the ones
+    outputed by the model on the results_df file.
+
+    Args:
+        results_df (pd.DataFrame): results table for all the sentences on the key file.
+        key_file_path (str): location of the key file, stored in CoNLL-U format.
+        response_file_path (str): where to store the response file in CoNLL-U format.
+    """
+    # Use sentence_id as index for results_df
+    results_df = results_df.set_index("sentence_id")
+
+    # Open key file
+    with open(key_file_path) as f:
+        # Read the whole CoNLL-U file
+        key_lines = f.readlines()
+
+    response_lines = []
+
+    def get_opening_entitiy_id(match):
+        try:
+            eid = entity_ids_list.pop(0)
+            reverse_entity_ids_list.append(eid)
+        except IndexError:
+            eid = "999"
+        return eid
+
+    def get_closing_entity_id(match):
+        try:
+            eid = reverse_entity_ids_list.pop()
+        except IndexError:
+            eid = "999"
+        if re.match(r"e\d+", match[0]):
+            repl_str = f"e{eid}"
+        else:
+            repl_str = match[0]
+        return repl_str
+
+    for line in key_lines:
+        if (line == "") or (line[0] == "#"):
+            if "sent_id" in line:
+                sentence_id = re.search(r"sent_id\s=\s(.*?)\n", line).group(1)
+                sentence_response = results_df.loc[sentence_id]["result"]
+                entity_ids_list = re.findall(r"(?<=\[)\d+", sentence_response)
+                reverse_entity_ids_list = []
+            response_lines.append(line)
+        else:
+            attributes = line.split("\t")
+            misc_str = attributes[-1]
+            if "Entity" in misc_str:
+                # Replace all opening entities
+                misc_str = re.sub(r"(?<=\(e)\d+", get_opening_entitiy_id, misc_str)
+                # Replace all closing entities
+                misc_str = re.sub(
+                    r"([a-zA-Z-]|e\d+)(?=\))", get_closing_entity_id, misc_str
+                )
+            if "SplitAnte" in misc_str:
+                # Delete SplitAnte from the response because the scoring function breaks
+                misc_str = re.sub(r"\|SplitAnte=.*(\||$)", "", misc_str)
+            attributes[-1] = misc_str
+            new_line = "\t".join(attributes)
+            response_lines.append(new_line)
+
+    # Write response file
+    with open(response_file_path, "w") as f:
+        f.writelines(response_lines)
