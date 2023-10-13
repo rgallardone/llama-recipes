@@ -1,6 +1,7 @@
 import difflib
 import math
 import re
+from typing import Callable
 
 import pandas as pd
 import torch
@@ -123,7 +124,9 @@ def batch_inference_documents(
     df: pd.DataFrame,
     tokenizer: LlamaTokenizer,
     model: PreTrainedModel,
-    instructions: dict,
+    instruction_first: str,
+    instruction_next: str,
+    postprocess_func: Callable,
     batch_size: int = 5,
     max_padding_length: int = 2000,
     max_new_tokens=100,  # The maximum numbers of tokens to generate
@@ -138,9 +141,6 @@ def batch_inference_documents(
     df["raw_result"] = None
     df["result"] = None
     df["previous_text"] = ""
-    df["sentence_index"] = df["sentence_id"].apply(
-        lambda x: re.search(r"\d+$", x).group(0)
-    )
 
     for sid in range(df["sentence_index"].max() + 1):
         print(f"Processing sentence_id = {sid}")
@@ -157,7 +157,7 @@ def batch_inference_documents(
             prompts = sentences_df.apply(
                 lambda row: prompt.format_map(
                     {
-                        "instruction": instructions["next_sentence"]["es"]["inst1"],
+                        "instruction": instruction_next,
                         "previous_text": row["previous_text"],
                         "sentence": row["sentence"],
                     }
@@ -169,9 +169,7 @@ def batch_inference_documents(
             prompts = sentences_df.apply(
                 lambda row: prompt_first.format_map(
                     {
-                        "instruction": instructions["next_sentence"]["es"][
-                            "inst1_first"
-                        ],
+                        "instruction": instruction_first,
                         "sentence": row["sentence"],
                     }
                 ),
@@ -215,7 +213,7 @@ def batch_inference_documents(
             torch.cuda.empty_cache()
 
         sentences_df.loc[:, "result"] = sentences_df[["sentence", "raw_result"]].apply(
-            lambda row: postprocess_result(row["sentence"], row["raw_result"]), axis=1
+            lambda row: postprocess_func(row["sentence"], row["raw_result"]), axis=1
         )
 
         if sid == 0:
@@ -290,7 +288,7 @@ def fill_identifiers_in_sentence(sentence: str, result: str) -> str:
     return output
 
 
-def postprocess_result(sentence: str, result: str) -> str:
+def postprocess_coref_result(sentence: str, result: str) -> str:
     """Apply several postprocessing functions to the result of the model
     to prepare it for the scoring functions.
 

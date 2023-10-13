@@ -10,6 +10,7 @@ from ft_datasets import (
     get_alpaca_dataset,
     get_ancora_dataset,
     get_ancora_ud_dataset,
+    get_ancorda_ud_mention_dataset,
     get_grammar_dataset,
     get_samsum_dataset,
 )
@@ -20,6 +21,7 @@ DATASET_PREPROC = {
     "samsum_dataset": get_samsum_dataset,
     "ancora_co_es": get_ancora_dataset,
     "ancora_co_es_ud": get_ancora_ud_dataset,
+    "ancora_co_es_ud_mention": get_ancorda_ud_mention_dataset,
 }
 
 

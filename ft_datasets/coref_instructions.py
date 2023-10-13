@@ -49,3 +49,21 @@ INSTRUCTIONS = {
         }
     },
 }
+
+INSTRUCTIONS_MENTION = {
+    "inst": (
+        "Dado un texto encerrado por los tokens <texto> y </texto> con menciones a entidades y "
+        "el indice de la palabra cabeza, y la siguiente oración del texto encerrada por los "
+        "tokens <oracion> y </oracion>, identificar en la oración las menciones a entidades y el "
+        "indice de su palabra cabeza. Las menciones se identifican con parentesis rectos, y el "
+        "indice de la palabra cabeza se identifica con 'head<i>' donde <i> es el indice dentro de "
+        "la mención de la palabra cabeza. Responde unicamente con la oración resultante y nada más."
+    ),
+    "inst_first": (
+        "Dada una oración encerrada por los tokens <oracion> y </oracion>, identificar las "
+        "menciones a entidades y el indice de la palabra cabeza de la mención. Las menciones se "
+        "identifican con parentesis rectos, y el indice de la palabra cabeza se identifica con "
+        "'head<i>' donde <i> es el indice dentro de la mención de la palabra cabeza. Responde "
+        "unicamente con la oración resultante y nada más."
+    ),
+}

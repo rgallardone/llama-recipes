@@ -1,8 +1,6 @@
 import copy
 import os
 import re
-import xml.etree.ElementTree as ET
-from typing import Literal, Tuple
 
 import pandas as pd
 import torch
@@ -175,39 +173,6 @@ class AncoraDatasetUD(torch.utils.data.Dataset):
         self.inst = INSTRUCTIONS["next_sentence"]["es"]["inst1"]
         self.inst_first = INSTRUCTIONS["next_sentence"]["es"][f"inst1_first"]
         self.max_words = max_words
-
-    def _parse_tree(
-        self, root: ET.Element, use_gold_mentions: bool = True
-    ) -> Tuple[str, str]:
-        text = ""
-        gold_text = ""
-        childs_text = ""
-        childs_gold_text = ""
-
-        if "wd" in root.attrib:
-            childs_text = re.sub(r"_", " ", root.attrib["wd"])
-            childs_gold_text = childs_text
-        elif "elliptic" not in root.attrib:
-            for i in range(len(root)):
-                child_text, child_gold_text = self._parse_tree(
-                    root[i], use_gold_mentions
-                )
-                childs_text += f"{child_text} "
-                childs_gold_text += f"{child_gold_text} "
-
-        # Singleton mentions are NOT included on the training and evaluation data
-        if ("entity" in root.attrib) and ("singleton" not in root.attrib["entity"]):
-            ent_num = re.search(r"\d+", root.attrib["entity"]).group(0)
-            if use_gold_mentions:
-                text += f"[ {childs_text}] "
-            else:
-                text += f"{childs_text} "
-            gold_text += f"[{ent_num} {childs_gold_text}] "
-        else:
-            text = childs_text
-            gold_text = childs_gold_text
-
-        return text, gold_text
 
     def __len__(self):
         return len(self.dataset_split)
