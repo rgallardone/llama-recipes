@@ -84,9 +84,14 @@ def main(
 
         dev_df = dev_dataset.to_pandas()
 
-        dev_df["sentence_index"] = dev_df["sentence_id"].apply(
-            lambda x: re.search(r"\d+$", x).group(0)
-        )
+        def get_sentence_index(sentence_id):
+            match = re.search(r"(\d+)([A-Z]?)$", sentence_id)
+            id = int(match.group(1))
+            if (match.group(2) != "") and (match.group(2) > "A"):
+                id += ord(match.group(2)) - ord("A")
+            return id
+
+        dev_df["sentence_index"] = dev_df.groupby("file")["sentence_id"].cumcount() + 1
 
         if max_sentences_per_doc is not None:
             dev_df = dev_df[dev_df["sentence_index"] <= max_sentences_per_doc]
